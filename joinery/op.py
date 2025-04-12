@@ -1,23 +1,18 @@
-import nltk
-
 from typing import Optional
 from pydub import AudioSegment
+import spacy
+import tiktoken
 
 from joinery.api.base import BaseTtsApi
 
-
 class JoinOp:
-    # This whole thing is kind of a kludge to allow reuse as a library while exposing the
-    # methods to the CLI script in a way that makes it easy to generate progress bars.
+    MAX_TOKENS = 1800  # safely below 2000 token limit
 
     def __init__(self, text: str, api: BaseTtsApi):
         self.text = text
         self.api = api
-        self._chunked_hash = None
-        self._chunks = [[]]
-        self._chunk_iter = 0
-
-        self._audio_chunks = []
+        self.nlp = spacy.load("xx_sent_ud_sm")
+        self.tokenizer = tiktoken.encoding_for_model("gpt-4")
 
     def process_to_file(self, file_path):
         chunks = self.chunk_all()
@@ -28,36 +23,49 @@ class JoinOp:
         audio.export(file_path)
 
     def chunk_all(self):
-        if len(self._chunks) > 0 and hash(self.text) != self._chunked_hash:
-            # Only run chunking if text has changed
-            self._chunked_hash = hash(self.text)
-            for sent in self.tokenize():
-                self.add_to_chunks(sent)
+        paragraphs = [p.strip() for p in self.text.split("\n") if p.strip()]
 
-        return self.chunked_text()
+        chunks = []
+        current_chunk = ""
+        current_chunk_tokens = 0
 
-    def tokenize(self) -> list[str]:
-        self.sentences = nltk.sent_tokenize(self.text)
-        return self.sentences
+        for paragraph in paragraphs:
+            paragraph_tokens = len(self.tokenizer.encode(paragraph))
 
-    def add_to_chunks(self, sentence: str):
-        if (
-            sum(map(len, self._chunks[self._chunk_iter]))
-            + len(
-                self._chunks[self._chunk_iter]
-            )  # Account for re-adding spaces after each sentence
-            + len(sentence)
-            < 4096
-        ):
-            self._chunks[self._chunk_iter].append(sentence)
-        else:
-            self._chunk_iter += 1
-            self._chunks.append(
-                [sentence]
-            )  # Will fail for sentences > 4096 chars, do we care?
+            if paragraph_tokens > self.MAX_TOKENS:
+                words = paragraph.split()
+                sub_chunk = ""
+                sub_chunk_tokens = 0
 
-    def chunked_text(self):
-        return [" ".join(a) for a in self._chunks]
+                for word in words:
+                    word_tokens = len(self.tokenizer.encode(word + " "))
+                    if sub_chunk_tokens + word_tokens <= self.MAX_TOKENS:
+                        sub_chunk += word + " "
+                        sub_chunk_tokens += word_tokens
+                    else:
+                        chunks.append(sub_chunk.strip())
+                        sub_chunk = word + " "
+                        sub_chunk_tokens = word_tokens
+
+                if sub_chunk.strip():
+                    chunks.append(sub_chunk.strip())
+
+                current_chunk = ""
+                current_chunk_tokens = 0
+            else:
+                if current_chunk_tokens + paragraph_tokens <= self.MAX_TOKENS:
+                    current_chunk += ("\n" if current_chunk else "") + paragraph
+                    current_chunk_tokens += paragraph_tokens
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                    current_chunk = paragraph
+                    current_chunk_tokens = paragraph_tokens
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        return chunks
 
     def run_tts(self, chunk):
         return self.api.process_to_file(chunk)
