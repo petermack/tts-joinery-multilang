@@ -73,7 +73,7 @@ def run_tts(
             err=True,
         )
 
-    text = input_file.read()
+    text = input_file.read() if input_file == sys.stdin else open(input_file.name, encoding='utf-8').read()
     if not text:
         click.echo(
             click.style(
@@ -103,14 +103,7 @@ def run_tts(
             instructions=instructions,
         ),
     )
-    sentences = op.tokenize()
-    with click.progressbar(
-        sentences, label="Chunking sentences", file=sys.stderr
-    ) as sentence_list:
-        for sentence in sentence_list:
-            op.add_to_chunks(sentence)
-
-    chunks = op.chunked_text()
+    chunks = op.chunk_all()
     click.echo(
         f"Preparing to run TTS in {len(chunks)} chunks...({list(map(len, chunks))})",
         err=True,
