@@ -1,6 +1,6 @@
 # tts-joinery-multilang
 
-**tts-joinery-multilang** is a multilingual-friendly fork of [tts-joinery](https://github.com/drien/tts-joinery), optimized specifically for UTF-8 texts, multilingual content, and texts lacking clear punctuation.
+**tts-joinery-multilang** is a multilingual-friendly fork of [tts-joinery](https://github.com/drien/tts-joinery), optimised specifically for UTF-8 texts, multilingual content, and texts lacking clear punctuation.
 
 The original project uses NLTK Punkt tokenizer, which works well for English and similar languages. This fork replaces it with a robust, token-aware chunking method using **spaCy** and **tiktoken**, ensuring reliable processing of multilingual and punctuation-light texts.
 
